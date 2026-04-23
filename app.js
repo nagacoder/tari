@@ -82,6 +82,18 @@ function formatDate(iso) {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// For PK/PM (calculation themes), break at every sentence boundary so
+// step-by-step working is readable. Other themes just convert \n → <br>.
+function formatExplanation(text, tema) {
+  if (!text) return '';
+  let out = text.replace(/\n/g, '<br>');
+  if (['PK', 'PM'].includes(tema)) {
+    // ". " (period + space) → period + line break, for every sentence
+    out = out.replace(/\. /g, '.<br>');
+  }
+  return out;
+}
+
 function renderKatex(container) {
   if (window.renderMathInElement) {
     renderMathInElement(container, {
@@ -564,45 +576,81 @@ function renderQuestion() {
   const total = state.missionQuestions.length;
   const idx = state.currentQuestionIdx;
 
-  state.selectedOption = null;
-  state.submitted = false;
+  // Determine if this question was already answered (review mode)
+  const existingResponse = state.sessionResponses.find(r => r.questionId === q.id);
+  const isReview = !!existingResponse;
+
+  state.submitted = isReview;
+  state.selectedOption = isReview ? existingResponse.userAnswer : null;
 
   // Header
   document.getElementById('q-mission-label').textContent = `Misi ${state.currentMission}`;
   document.getElementById('q-tema-label').textContent = `${CONFIG.TEMA_EMOJI[q.tema] || ''} ${q.tema}`;
   document.getElementById('q-progress-label').textContent = `Soal ${idx + 1} dari ${total}`;
-
-  const pct = Math.round(((idx + 1) / total) * 100);
-  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-bar').style.width = Math.round(((idx + 1) / total) * 100) + '%';
 
   // Buttons
   const btnSubmit = document.getElementById('btn-submit');
-  const btnNext = document.getElementById('btn-next');
-  btnSubmit.classList.remove('hidden');
-  btnNext.classList.add('hidden');
-  btnSubmit.disabled = true;
+  const btnNext   = document.getElementById('btn-next');
+  const btnPrev   = document.getElementById('btn-prev');
 
-  // Options
+  // Prev: show only when previous question exists and has been answered
+  const prevQ = idx > 0 ? state.missionQuestions[idx - 1] : null;
+  const prevAnswered = prevQ && state.sessionResponses.find(r => r.questionId === prevQ.id);
+  btnPrev.classList.toggle('hidden', !prevAnswered);
+
+  if (isReview) {
+    btnSubmit.classList.add('hidden');
+    btnNext.classList.remove('hidden');
+    const allAnswered = state.sessionResponses.length >= total;
+    const isLastQ    = idx === total - 1;
+    btnNext.textContent = (isLastQ && allAnswered) ? 'Lihat Hasil Misi 🏁' : 'Soal Berikutnya →';
+    btnNext.onclick   = (isLastQ && allAnswered) ? finishMission : nextQuestion;
+  } else {
+    btnSubmit.classList.remove('hidden');
+    btnSubmit.disabled = true;
+    btnNext.classList.add('hidden');
+  }
+
+  // Options (with review state pre-applied if needed)
   const options = [];
   ['a', 'b', 'c', 'd', 'e'].forEach(letter => {
     const val = q['opsi_' + letter];
     if (val) options.push({ letter: letter.toUpperCase(), text: val });
   });
 
-  const optionsHtml = options.map(opt => `
-    <button class="option-btn" data-letter="${opt.letter}" type="button">
-      <span class="option-letter">${opt.letter}</span>
-      <span class="option-text">${opt.text}</span>
-    </button>
-  `).join('');
+  const correct = q.kunci_jawaban.toUpperCase();
+  const chosen  = isReview ? existingResponse.userAnswer : null;
 
+  const optionsHtml = options.map(opt => {
+    let extraClass = '';
+    if (isReview) {
+      if (opt.letter === correct)                         extraClass = ' correct';
+      else if (opt.letter === chosen && chosen !== correct) extraClass = ' wrong';
+    }
+    return `
+      <button class="option-btn${extraClass}" data-letter="${opt.letter}" type="button" ${isReview ? 'disabled' : ''}>
+        <span class="option-letter">${opt.letter}</span>
+        <span class="option-text">${opt.text}</span>
+      </button>`;
+  }).join('');
+
+  // Materi: auto-open (open class applied immediately)
   const materiHtml = q.materi_pengantar ? `
     <div class="materi-accordion">
-      <button class="materi-toggle" type="button">
-        <span>📖 Materi Pengantar — ${q.sub_tema}</span>
+      <button class="materi-toggle open" type="button">
+        <span>📖 ${q.sub_tema}</span>
         <span class="arrow">▼</span>
       </button>
-      <div class="materi-body">${q.materi_pengantar}</div>
+      <div class="materi-body open">${q.materi_pengantar}</div>
+    </div>
+  ` : '';
+
+  // Feedback for review mode
+  const feedbackHtml = isReview ? `
+    <div class="feedback-box ${existingResponse.isCorrect ? 'feedback-correct' : 'feedback-wrong'}">
+      <div class="feedback-title">${existingResponse.isCorrect ? '✅ Jawaban Benar!' : `❌ Jawaban Salah — Kunci: ${correct}`}</div>
+      <div class="explanation-text">${formatExplanation(q.penjelasan_jawaban, q.tema)}</div>
     </div>
   ` : '';
 
@@ -610,10 +658,10 @@ function renderQuestion() {
     ${materiHtml}
     <div class="question-text">${q.pertanyaan}</div>
     <div class="options-list">${optionsHtml}</div>
-    <div id="feedback-area"></div>
+    <div id="feedback-area">${feedbackHtml}</div>
   `;
 
-  // Materi accordion toggle
+  // Materi accordion still toggleable after auto-open
   const toggle = document.querySelector('.materi-toggle');
   if (toggle) {
     toggle.addEventListener('click', () => {
@@ -622,21 +670,25 @@ function renderQuestion() {
     });
   }
 
-  // Option selection
-  document.querySelectorAll('.option-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (state.submitted) return;
-      document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      state.selectedOption = btn.dataset.letter;
-      btnSubmit.disabled = false;
+  // Option selection (fresh mode only)
+  if (!isReview) {
+    document.querySelectorAll('.option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        state.selectedOption = btn.dataset.letter;
+        btnSubmit.disabled = false;
+      });
     });
-  });
-
-  // KaTeX
-  if (q.ada_latex) {
-    renderKatex(document.getElementById('question-body'));
   }
+
+  if (q.ada_latex) renderKatex(document.getElementById('question-body'));
+}
+
+function prevQuestion() {
+  state.currentQuestionIdx--;
+  renderQuestion();
+  document.getElementById('question-body').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function submitAnswer() {
@@ -662,7 +714,7 @@ function submitAnswer() {
   feedbackArea.innerHTML = `
     <div class="feedback-box ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}">
       <div class="feedback-title">${isCorrect ? '✅ Jawaban Benar!' : `❌ Jawaban Salah — Kunci: ${correct}`}</div>
-      <div>${q.penjelasan_jawaban}</div>
+      <div class="explanation-text">${formatExplanation(q.penjelasan_jawaban, q.tema)}</div>
     </div>
   `;
 
@@ -862,7 +914,8 @@ function renderResult(score, themeScores, correct, total, missionNo) {
         ? `<button class="btn btn-primary btn-full" id="btn-next-mission">Misi Berikutnya (${missionNo + 1}) →</button>`
         : `<div class="card text-center" style="padding:20px"><div style="font-size:32px">🏆</div><p style="font-weight:700;margin-top:8px">Selamat! Semua misi selesai!</p></div>`
       }
-      <button class="btn btn-secondary btn-full" id="btn-to-dashboard">← Kembali ke Dashboard</button>
+      <button class="btn btn-secondary btn-full" id="btn-download-pdf">📄 Download Ringkasan PDF</button>
+      <button class="btn btn-ghost btn-full" id="btn-to-dashboard">← Kembali ke Dashboard</button>
     </div>
     <div style="height:8px"></div>
   `;
@@ -872,11 +925,139 @@ function renderResult(score, themeScores, correct, total, missionNo) {
     renderDashboard();
   });
 
+  document.getElementById('btn-download-pdf').addEventListener('click', generatePDF);
+
   if (!isLastMission) {
     document.getElementById('btn-next-mission').addEventListener('click', () => {
       showPreview(missionNo + 1);
     });
   }
+}
+
+// ---- PDF EXPORT ----
+function generatePDF() {
+  const questions  = state.missionQuestions;
+  const responses  = state.sessionResponses;
+  const user       = state.currentUser;
+  const missionNo  = state.currentMission;
+  const scores     = db.getScores();
+  const scoreData  = (scores[user.id] || {})[missionNo] || {};
+  const totalCorrect = responses.filter(r => r.isCorrect).length;
+  const finalScore   = scoreData.total ?? Math.round((totalCorrect / Math.max(responses.length, 1)) * 100);
+
+  // Per-theme summary rows
+  const themeRows = CONFIG.TEMAS.map(tema => {
+    const tRes = responses.filter(r => r.tema === tema);
+    if (!tRes.length) return '';
+    const ok  = tRes.filter(r => r.isCorrect).length;
+    const acc = Math.round((ok / tRes.length) * 100);
+    const col = acc >= 75 ? '#16a34a' : acc >= 50 ? '#d97706' : '#dc2626';
+    return `<tr>
+      <td>${CONFIG.TEMA_EMOJI[tema]} ${CONFIG.TEMA_NAMES[tema]}</td>
+      <td style="text-align:center">${ok}/${tRes.length}</td>
+      <td style="text-align:center;font-weight:700;color:${col}">${acc}%</td>
+    </tr>`;
+  }).join('');
+
+  // Per-question blocks
+  const questionBlocks = questions.map((q, i) => {
+    const resp = responses.find(r => r.questionId === q.id);
+    if (!resp) return '';  // unanswered (shouldn't happen after finish)
+
+    const correct = q.kunci_jawaban.toUpperCase();
+    const chosen  = resp.userAnswer;
+
+    const opts = [];
+    ['a','b','c','d','e'].forEach(l => { if (q['opsi_' + l]) opts.push({ l: l.toUpperCase(), t: q['opsi_' + l] }); });
+
+    const optRows = opts.map(o => {
+      let cls = '', marker = '';
+      if (o.l === correct && o.l === chosen) { cls = 'pdf-option-ok';   marker = ' ✅ Jawaban kamu — BENAR'; }
+      else if (o.l === correct)              { cls = 'pdf-option-ok';   marker = ' ✅ Kunci jawaban'; }
+      else if (o.l === chosen)               { cls = 'pdf-option-fail'; marker = ' ❌ Jawaban kamu — SALAH'; }
+      return `<div class="pdf-option ${cls}">${o.l}. ${o.t}${marker}</div>`;
+    }).join('');
+
+    const stars = '★'.repeat(Math.min(Math.ceil((q.level_kesulitan || 1) / 2), 5));
+
+    return `<div class="pdf-q">
+      <div class="pdf-q-meta">
+        <span>Soal ${i + 1}</span>
+        <span class="pdf-badge pdf-badge-tema">${q.tema}</span>
+        <span class="pdf-badge ${resp.isCorrect ? 'pdf-badge-ok' : 'pdf-badge-fail'}">${resp.isCorrect ? '✅ Benar' : '❌ Salah'}</span>
+      </div>
+      <div class="pdf-subtema">${q.sub_tema} &nbsp;|&nbsp; ${stars}</div>
+
+      ${q.materi_pengantar ? `
+        <div class="pdf-section-label">📖 Materi Pengantar</div>
+        <div class="pdf-materi">${q.materi_pengantar}</div>` : ''}
+
+      <div class="pdf-section-label">❓ Pertanyaan</div>
+      <div class="pdf-question">${q.pertanyaan}</div>
+
+      <div class="pdf-section-label">Pilihan Jawaban</div>
+      ${optRows}
+
+      <div class="pdf-section-label">💡 Penjelasan</div>
+      <div class="pdf-explanation">${formatExplanation(q.penjelasan_jawaban, q.tema)}</div>
+    </div>`;
+  }).join('');
+
+  const hasLatex = questions.some(q => q.ada_latex);
+
+  const html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Ringkasan Misi ${missionNo} — ${user.name}</title>
+${hasLatex ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">' : ''}
+<link rel="stylesheet" href="style.css">
+<style>
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; font-size:13px; color:#1e293b; padding:20px; background:#fff; }
+</style>
+</head>
+<body class="pdf-win">
+
+  <div class="pdf-header">
+    <h1>🎯 UTBK Try Out 2026 — Misi ${missionNo}: ${CONFIG.MISI_LABEL[missionNo - 1]}</h1>
+    <p>Peserta: ${user.name} &nbsp;|&nbsp; ${formatDate(new Date().toISOString())} &nbsp;|&nbsp; ${CONFIG.MISI_STARS[missionNo - 1]}</p>
+  </div>
+
+  <div class="pdf-summary">
+    <div class="pdf-stat"><div class="pdf-stat-val">${finalScore}</div><div class="pdf-stat-lbl">Skor</div></div>
+    <div class="pdf-stat"><div class="pdf-stat-val">${totalCorrect}/${responses.length}</div><div class="pdf-stat-lbl">Benar</div></div>
+    <div class="pdf-stat"><div class="pdf-stat-val">${responses.length - totalCorrect}</div><div class="pdf-stat-lbl">Salah</div></div>
+  </div>
+
+  <table class="pdf-theme-table">
+    <thead><tr><th>Tema</th><th style="text-align:center">Benar/Total</th><th style="text-align:center">Akurasi</th></tr></thead>
+    <tbody>${themeRows}</tbody>
+  </table>
+
+  <hr style="border:none;border-top:2px solid #e2e8f0;margin:20px 0">
+
+  ${questionBlocks}
+
+  <button class="pdf-print-btn" onclick="window.print()">🖨️ Print / Simpan PDF</button>
+
+${hasLatex ? `
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>
+  <script>
+    window.addEventListener('load', function() {
+      renderMathInElement(document.body, {
+        delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],
+        throwOnError:false
+      });
+    });
+  <\/script>` : ''}
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=860,height=700');
+  if (!win) { alert('Izinkan popup di browser untuk membuka PDF.'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 // ---- PROGRESS ----
@@ -918,6 +1099,7 @@ async function init() {
     renderDashboard();
   });
   document.getElementById('btn-submit').addEventListener('click', submitAnswer);
+  document.getElementById('btn-prev').addEventListener('click', prevQuestion);
 
   // Load questions
   try {

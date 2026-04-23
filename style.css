@@ -155,6 +155,13 @@ input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var
 .btn-warn { background: var(--amber); color: white; }
 .btn-warn:hover { background: #b45309; }
 
+.btn-ghost {
+  background: none;
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+}
+.btn-ghost:hover { background: var(--bg); color: var(--text); }
+
 .btn-full { width: 100%; }
 
 .btn-sm { height: 36px; font-size: 14px; padding: 0 14px; }
@@ -506,6 +513,8 @@ input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var
 .feedback-correct { background: var(--green-light); border-left: 4px solid var(--green); }
 .feedback-wrong { background: var(--red-light); border-left: 4px solid var(--red); }
 .feedback-title { font-weight: 700; margin-bottom: 4px; font-size: 15px; }
+.explanation-text { line-height: 1.8; }
+.explanation-text br { display: block; margin-bottom: 2px; }
 
 .question-footer {
   padding: 12px 16px 24px;
@@ -601,4 +610,77 @@ input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var
   #resume-banner { max-width: 700px; margin: 0 auto; }
   .preview-content, .result-content { max-width: 540px; margin: 0 auto; }
   .question-body { max-width: 640px; margin: 0 auto; }
+}
+
+/* ===== PDF PRINT WINDOW ===== */
+.pdf-win {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.6;
+  padding: 20px;
+}
+.pdf-header {
+  background: #1e3a5f;
+  color: white;
+  padding: 20px 24px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+.pdf-header h1 { font-size: 18px; font-weight: 800; }
+.pdf-header p  { opacity: .85; font-size: 12px; margin-top: 4px; }
+
+.pdf-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pdf-stat {
+  flex: 1;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+.pdf-stat-val { font-size: 24px; font-weight: 800; color: #2563eb; }
+.pdf-stat-lbl { font-size: 11px; color: #64748b; text-transform: uppercase; }
+
+.pdf-theme-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+.pdf-theme-table th { background: #f1f5f9; padding: 7px 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase; }
+.pdf-theme-table td { padding: 7px 12px; border-bottom: 1px solid #e2e8f0; }
+
+.pdf-q {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  page-break-inside: avoid;
+}
+.pdf-q-meta { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+.pdf-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+.pdf-badge-tema  { background: #dbeafe; color: #1e3a5f; }
+.pdf-badge-ok    { background: #dcfce7; color: #16a34a; }
+.pdf-badge-fail  { background: #fee2e2; color: #dc2626; }
+.pdf-subtema { font-size: 11px; color: #64748b; margin-bottom: 10px; }
+
+.pdf-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin: 10px 0 5px; }
+.pdf-materi { background: #eff6ff; border-left: 3px solid #2563eb; padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 13px; }
+.pdf-question { font-size: 14px; white-space: pre-wrap; line-height: 1.7; }
+
+.pdf-option { padding: 5px 10px; border-radius: 4px; margin-bottom: 3px; font-size: 13px; }
+.pdf-option-ok   { background: #dcfce7; font-weight: 700; color: #16a34a; }
+.pdf-option-fail { background: #fee2e2; font-weight: 700; color: #dc2626; }
+
+.pdf-explanation { background: #fefce8; border-left: 3px solid #d97706; padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 13px; }
+
+.pdf-print-btn {
+  position: fixed; bottom: 20px; right: 20px;
+  background: #2563eb; color: white;
+  border: none; border-radius: 8px;
+  padding: 12px 20px; font-size: 15px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+}
+@media print {
+  .pdf-print-btn { display: none; }
+  @page { size: A4; margin: 12mm 14mm; }
 }
