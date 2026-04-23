@@ -517,7 +517,7 @@ input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var
 .explanation-text br { display: block; margin-bottom: 2px; }
 
 .question-footer {
-  padding: 12px 16px 24px;
+  padding: 12px 16px 20px;
   background: var(--bg);
   position: sticky;
   bottom: 0;
@@ -526,6 +526,25 @@ input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var
   flex-direction: column;
   gap: 8px;
 }
+
+.wa-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #16a34a;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background var(--transition);
+}
+.wa-footer-btn:hover  { background: #dcfce7; }
+.wa-footer-btn:active { opacity: .85; }
+.wa-footer-btn svg    { flex-shrink: 0; color: #25D366; }
+.wa-footer-btn strong { font-weight: 700; }
 
 /* ===== RESULT ===== */
 .result-content { padding: 16px; }
