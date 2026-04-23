@@ -54,6 +54,9 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById('screen-' + id);
   if (el) el.classList.add('active');
+  // Question screen has a sticky footer — push WA button above it
+  const waBtn = document.querySelector('.wa-float');
+  if (waBtn) waBtn.style.bottom = (id === 'question') ? '140px' : '90px';
 }
 
 // ===== HELPERS =====
@@ -848,11 +851,6 @@ function finishMission() {
 
 // ---- RESULT ----
 function renderResult(score, themeScores, correct, total, missionNo) {
-  const userId = state.currentUser.id;
-  const analytics = db.getAnalytics();
-  const userAnalytics = analytics[userId] || {};
-
-  const scoreClass = score >= 75 ? 'good' : score >= 50 ? 'mid' : 'bad';
 
   const themeBreakdown = CONFIG.TEMAS.map(tema => {
     const acc = themeScores[tema];
